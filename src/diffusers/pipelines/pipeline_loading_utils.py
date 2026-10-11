@@ -265,10 +265,18 @@ def _unwrap_model(model):
 
 
 def maybe_raise_or_warn(
-    library_name, library, class_name, importable_classes, passed_class_obj, name, is_pipeline_module
+    library_name,
+    library,
+    class_name,
+    importable_classes,
+    passed_class_obj,
+    name,
+    is_pipeline_module,
+    trust_remote_code=False,
 ):
     """Simple helper method to raise or warn in case incorrect module has been passed"""
     if not is_pipeline_module:
+        _check_library_trust(library_name, trust_remote_code)
         library = importlib.import_module(library_name)
         class_obj = getattr(library, class_name)
         class_candidates = {c: getattr(library, c, None) for c in importable_classes.keys()}
@@ -295,25 +303,43 @@ def maybe_raise_or_warn(
         )
 
 
+def _check_library_trust(library_name, trust_remote_code=False):
+    if not any(library_name == name or library_name.startswith(name + ".") for name in LOADABLE_CLASSES):
+        from ..utils.dynamic_modules_utils import check_custom_code_trust
+
+        check_custom_code_trust(trust_remote_code)
+
+
 def get_class_obj_and_candidates(
-    library_name, class_name, importable_classes, pipelines, is_pipeline_module, component_name=None, cache_dir=None
+    library_name,
+    class_name,
+    importable_classes,
+    pipelines,
+    is_pipeline_module,
+    component_name=None,
+    cache_dir=None,
+    trust_remote_code=False,
 ):
     """Simple helper method to retrieve class object of module as well as potential parent class objects"""
-    component_folder = os.path.join(cache_dir, component_name)
+    component_folder = os.path.join(cache_dir, component_name) if cache_dir and component_name else None
 
     if is_pipeline_module:
         pipeline_module = getattr(pipelines, library_name)
 
         class_obj = getattr(pipeline_module, class_name)
         class_candidates = {c: class_obj for c in importable_classes.keys()}
-    elif os.path.isfile(os.path.join(component_folder, library_name + ".py")):
+    elif component_folder and os.path.isfile(os.path.join(component_folder, library_name + ".py")):
         # load custom component
         class_obj = get_class_from_dynamic_module(
-            component_folder, module_file=library_name + ".py", class_name=class_name
+            component_folder,
+            module_file=library_name + ".py",
+            class_name=class_name,
+            trust_remote_code=trust_remote_code,
         )
         class_candidates = {c: class_obj for c in importable_classes.keys()}
     else:
         # else we just import it from the library.
+        _check_library_trust(library_name, trust_remote_code)
         library = importlib.import_module(library_name)
 
         class_obj = getattr(library, class_name)
@@ -329,6 +355,7 @@ def _get_custom_pipeline_class(
     class_name=None,
     cache_dir=None,
     revision=None,
+    trust_remote_code=False,
 ):
     if custom_pipeline.endswith(".py"):
         path = Path(custom_pipeline)
@@ -352,6 +379,7 @@ def _get_custom_pipeline_class(
         class_name=class_name,
         cache_dir=cache_dir,
         revision=revision,
+        trust_remote_code=trust_remote_code,
     )
 
 
@@ -365,6 +393,7 @@ def _get_pipeline_class(
     class_name=None,
     cache_dir=None,
     revision=None,
+    trust_remote_code=False,
 ):
     if custom_pipeline is not None:
         return _get_custom_pipeline_class(
@@ -374,6 +403,7 @@ def _get_pipeline_class(
             class_name=class_name,
             cache_dir=cache_dir,
             revision=revision,
+            trust_remote_code=trust_remote_code,
         )
 
     if class_obj.__name__ != "DiffusionPipeline":
@@ -426,6 +456,7 @@ def _load_empty_model(
         is_pipeline_module,
         component_name=name,
         cache_dir=cached_folder,
+        trust_remote_code=kwargs.get("trust_remote_code", False),
     )
 
     if is_transformers_available():
@@ -549,6 +580,7 @@ def _get_final_device_map(device_map, pipeline_class, passed_class_obj, init_dic
                 passed_class_obj,
                 name,
                 is_pipeline_module,
+                trust_remote_code=kwargs.get("trust_remote_code", False),
             )
             with accelerate.init_empty_weights():
                 loaded_sub_model = passed_class_obj[name]
@@ -569,6 +601,7 @@ def _get_final_device_map(device_map, pipeline_class, passed_class_obj, init_dic
                 local_files_only=kwargs.get("local_files_only", None),
                 token=kwargs.get("token", None),
                 revision=kwargs.get("revision", None),
+                trust_remote_code=kwargs.get("trust_remote_code", False),
             )
 
         if loaded_sub_model is not None:
@@ -627,6 +660,7 @@ def load_sub_model(
     low_cpu_mem_usage: bool,
     cached_folder: Union[str, os.PathLike],
     use_safetensors: bool,
+    trust_remote_code: bool = False,
 ):
     """Helper method to load the module `name` from `library_name` and `class_name`"""
 
@@ -640,6 +674,7 @@ def load_sub_model(
         is_pipeline_module,
         component_name=name,
         cache_dir=cached_folder,
+        trust_remote_code=trust_remote_code,
     )
 
     load_method_name = None

@@ -39,6 +39,13 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 COMMUNITY_PIPELINES_MIRROR_ID = "diffusers/community-pipelines-mirror"
 
 
+def check_custom_code_trust(trust_remote_code=False, community=False):
+    if os.environ.get("DIFFUSERS_DISABLE_REMOTE_CODE", "").upper() in {"1", "ON", "YES", "TRUE"}:
+        raise ValueError("Custom code is disabled by DIFFUSERS_DISABLE_REMOTE_CODE")
+    if not community and trust_remote_code is not True:
+        raise ValueError("Loading custom code requires trust_remote_code=True")
+
+
 def get_diffusers_versions():
     url = "https://pypi.org/pypi/diffusers/json"
     releases = json.loads(request.urlopen(url).read())["releases"].keys()
@@ -203,6 +210,7 @@ def get_cached_module_file(
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    trust_remote_code: bool = False,
 ):
     """
     Prepares Downloads a module from a local folder or a distant repo and returns its path inside the cached
@@ -253,14 +261,19 @@ def get_cached_module_file(
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
 
     module_file_or_url = os.path.join(pretrained_model_name_or_path, module_file)
+    is_local_file = os.path.isfile(module_file_or_url)
+    check_custom_code_trust(
+        trust_remote_code,
+        community=not is_local_file and "/" not in pretrained_model_name_or_path,
+    )
 
-    if os.path.isfile(module_file_or_url):
+    if is_local_file:
         resolved_module_file = module_file_or_url
         submodule = "local"
     elif pretrained_model_name_or_path.count("/") == 0:
         available_versions = get_diffusers_versions()
         # cut ".dev0"
-        latest_version = "v" + ".".join(__version__.split(".")[:3])
+        latest_version = "v" + version.Version(__version__).base_version
 
         # retrieve github version that matches
         if revision is None:
@@ -366,6 +379,7 @@ def get_cached_module_file(
                     token=token,
                     revision=revision,
                     local_files_only=local_files_only,
+                    trust_remote_code=trust_remote_code,
                 )
     return os.path.join(full_submodule, module_file)
 
@@ -381,6 +395,7 @@ def get_class_from_dynamic_module(
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    trust_remote_code: bool = False,
     **kwargs,
 ):
     """
@@ -453,5 +468,6 @@ def get_class_from_dynamic_module(
         token=token,
         revision=revision,
         local_files_only=local_files_only,
+        trust_remote_code=trust_remote_code,
     )
     return get_class_in_module(class_name, final_module.replace(".py", ""))

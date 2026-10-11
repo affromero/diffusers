@@ -67,6 +67,9 @@ def load_single_file_sub_model(
         class_obj = getattr(pipeline_module, class_name)
     else:
         # else we just import it from the library.
+        from ..pipelines.pipeline_loading_utils import _check_library_trust
+
+        _check_library_trust(library_name, kwargs.get("trust_remote_code", False))
         library = importlib.import_module(library_name)
         class_obj = getattr(library, class_name)
 

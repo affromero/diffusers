@@ -654,6 +654,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
         """
         # Copy the kwargs to re-use during loading connected pipeline.
         kwargs_copied = kwargs.copy()
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -742,6 +743,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
                 use_onnx=use_onnx,
                 custom_pipeline=custom_pipeline,
                 custom_revision=custom_revision,
+                trust_remote_code=trust_remote_code,
                 variant=variant,
                 load_connected_pipeline=load_connected_pipeline,
                 **kwargs,
@@ -791,6 +793,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
             class_name=custom_class_name,
             cache_dir=cache_dir,
             revision=custom_revision,
+            trust_remote_code=trust_remote_code,
         )
 
         if device_map is not None and pipeline_class._load_connected_pipes:
@@ -889,6 +892,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
                 local_files_only=local_files_only,
                 token=token,
                 revision=revision,
+                trust_remote_code=trust_remote_code,
             )
 
         # 7. Load each module in the pipeline
@@ -915,7 +919,14 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
                 # if the model is in a pipeline module, then we load it from the pipeline
                 # check that passed_class_obj has correct parent class
                 maybe_raise_or_warn(
-                    library_name, library, class_name, importable_classes, passed_class_obj, name, is_pipeline_module
+                    library_name,
+                    library,
+                    class_name,
+                    importable_classes,
+                    passed_class_obj,
+                    name,
+                    is_pipeline_module,
+                    trust_remote_code=trust_remote_code,
                 )
 
                 loaded_sub_model = passed_class_obj[name]
@@ -942,6 +953,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
                     low_cpu_mem_usage=low_cpu_mem_usage,
                     cached_folder=cached_folder,
                     use_safetensors=use_safetensors,
+                    trust_remote_code=trust_remote_code,
                 )
                 logger.info(
                     f"Loaded {name} as {class_name} from `{name}` subfolder of {pretrained_model_name_or_path}."
@@ -1410,6 +1422,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
                 class_name=custom_class_name,
                 cache_dir=cache_dir,
                 revision=custom_revision,
+                trust_remote_code=trust_remote_code,
             )
             expected_components, _ = cls._get_signature_keys(pipeline_class)
             passed_components = [k for k in expected_components if k in kwargs]
@@ -1489,6 +1502,7 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
                         "token": token,
                         "variant": variant,
                         "use_safetensors": use_safetensors,
+                        "trust_remote_code": trust_remote_code,
                     }
                     DiffusionPipeline.download(connected_pipe_repo_id, **download_kwargs)
 
@@ -1742,13 +1756,16 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
 
         original_config = dict(pipeline.config)
         torch_dtype = kwargs.pop("torch_dtype", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
 
         # derive the pipeline class to instantiate
         custom_pipeline = kwargs.pop("custom_pipeline", None)
         custom_revision = kwargs.pop("custom_revision", None)
 
         if custom_pipeline is not None:
-            pipeline_class = _get_custom_pipeline_class(custom_pipeline, revision=custom_revision)
+            pipeline_class = _get_custom_pipeline_class(
+                custom_pipeline, revision=custom_revision, trust_remote_code=trust_remote_code
+            )
         else:
             pipeline_class = cls
 

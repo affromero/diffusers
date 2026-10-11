@@ -314,6 +314,7 @@ class FlaxDiffusionPipeline(ConfigMixin, PushToHubMixin):
         ```
         """
         cache_dir = kwargs.pop("cache_dir", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
         token = kwargs.pop("token", None)
@@ -435,6 +436,10 @@ class FlaxDiffusionPipeline(ConfigMixin, PushToHubMixin):
             if name in passed_class_obj:
                 # 1. check that passed_class_obj has correct parent class
                 if not is_pipeline_module:
+                    if library_name not in LOADABLE_CLASSES:
+                        from ..utils.dynamic_modules_utils import check_custom_code_trust
+
+                        check_custom_code_trust(trust_remote_code)
                     library = importlib.import_module(library_name)
                     class_obj = getattr(library, class_name)
                     importable_classes = LOADABLE_CLASSES[library_name]
@@ -472,6 +477,10 @@ class FlaxDiffusionPipeline(ConfigMixin, PushToHubMixin):
                 class_candidates = {c: class_obj for c in importable_classes.keys()}
             else:
                 # else we just import it from the library.
+                if library_name not in LOADABLE_CLASSES:
+                    from ..utils.dynamic_modules_utils import check_custom_code_trust
+
+                    check_custom_code_trust(trust_remote_code)
                 library = importlib.import_module(library_name)
                 class_obj = import_flax_or_no_model(library, class_name)
 
